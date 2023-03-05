@@ -1,0 +1,12 @@
+jupyterlab
+numpy
+pandas
+matplotlib
+scipy
+pillow
+torch
+torchvision
+torchaudio
+seaborn
+opencv-python
+ipywidgets
