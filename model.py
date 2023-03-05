@@ -65,9 +65,8 @@ class NvidiaModel(nn.Module):
             # output layer
             nn.Linear(10, 1)
         )
-        self.double()
 
     def forward(self, x):
         x = self.layers(x)
-        x = torch.atan(x) * self.scale_factor
+        #x = torch.atan(x) * self.scale_factor
         return torch.flatten(x)

@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import os
 import scipy
+import torch
 
 
 transform_img = transforms.Compose([
@@ -37,13 +38,13 @@ class SullyChenDataset(Dataset):
         if self.transform:
             image = self.transform(image)
                     
-        return image.double(), y.astype(np.double)
+        return image.float(), np.float(y)
 
 
-def get_data_subsets_loaders() -> (DataLoader, DataLoader):
+def get_data_subsets_loaders() -> (DataLoader, DataLoader):    
     transform_img = transforms.Compose([
-        transforms.Resize(config.resize),
         transforms.ToTensor(),
+        transforms.Resize(config.resize),
         transforms.Normalize(config.mean, config.std)
     ])
     dataset = SullyChenDataset(transform=transform_img)

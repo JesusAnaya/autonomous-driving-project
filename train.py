@@ -9,13 +9,11 @@ import pandas as pd
 from model import NvidiaModel
 from config import config
 
-LOGDIR = './save'
 
-
-def save_model(model):
-    if not os.path.exists(LOGDIR):
-        os.makedirs(LOGDIR)
-    checkpoint_path = os.path.join(LOGDIR, config.model_path)
+def save_model(model, log_dir="./save"):
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    checkpoint_path = os.path.join(log_dir, config.model_path)
     if config.device == 'cuda':
         model.to('cpu')
     torch.save(model.state_dict(), checkpoint_path)
@@ -25,21 +23,34 @@ def save_model(model):
     print("Model saved in file: %s" % checkpoint_path)
     
 
-def validation():
-    try:
-        xs, ys = next(test_loader)
-    except:
-        test_loader = iter(val_subset_loader)
-        xs, ys = next(test_loader)
 
-    xs = xs.to(config.device)
-    ys = ys.to(config.device)
+def validation(model, val_subset_loader, loss_function):
+    # Load model
+    model.eval()
+    batch_loss = np.array([])
 
-    with torch.no_grad():
-        loss_value = loss_function(model(xs), ys).item()
-    print("Epoch: %d, Step: %d, Loss: %g" % (epoch, epoch * config.batch_size + batch_idx, loss_value))
+    for data_val, target_val in val_subset_loader:
+        # send data to device (its is medatory if GPU has to be used)
+        data_val = data_val.to(config.device)
 
+        # send target to device
+        target_val = target_val.to(config.device)
+        
+        with torch.no_grad():
+            # forward pass to the model
+            y_pred_val = model(data_val)
 
+            # cross entropy loss
+            loss = loss_function(y_pred_val.float(), target_val.float())
+
+        # Capture log
+        batch_loss = np.append(batch_loss, [loss.item()])
+
+    epoch_loss = batch_loss.mean()    
+    print(f'Validation Loss: {epoch_loss:.6f}')
+    return epoch_loss
+
+            
 def main():
     # train over the dataset about 30 times
     train_subset_loader, val_subset_loader = dataset_loader.get_data_subsets_loaders()
@@ -55,14 +66,15 @@ def main():
     # Loss function using MSE
     loss_function = nn.MSELoss()
 
-    # change model in training mood
-    model.train()
-
     # to get batch loss
     batch_loss = np.array([])
     batch_loss_mean = np.array([])
+    batch_val_loss = np.array([])
     
     for epoch in range(config.epochs_count):
+        # change model in training mood
+        model.train()
+        
         for batch_idx, (data, target) in enumerate(train_subset_loader):
             # send data to device (its is medatory if GPU has to be used)
             data = data.to(config.device)
@@ -77,7 +89,7 @@ def main():
             y_pred = model(data)
             
             # cross entropy loss
-            loss = loss_function(y_pred, target)
+            loss = loss_function(y_pred.float(), target.float())
         
             loss.backward()
             optimizer.step()
@@ -88,11 +100,13 @@ def main():
                 epoch_loss = batch_loss.mean()
                 batch_loss_mean = np.append(batch_loss_mean, [epoch_loss])
                 print(f'Epoch: {epoch} Batch {batch_idx} \nTrain Loss: {epoch_loss:.6f}')
-
+        
+        val_loss_mean = validation(model, val_subset_loader, loss_function)
+        batch_val_loss = np.append(batch_val_loss, [val_loss_mean.item()])
         save_model(model)
 
-    loss_acc_df = pd.DataFrame({"loss": batch_loss_mean})
-    loss_acc_df.to_csv("loss_acc_results.csv", index=None)
+    pd.DataFrame({"loss": batch_loss_mean}).to_csv("loss_acc_results.csv", index=None)
+    pd.DataFrame({"val_loss": batch_val_loss}).to_csv("loss_acc_validation.csv", index=None)
     print("loss_acc_results.csv saved!")
 
 
