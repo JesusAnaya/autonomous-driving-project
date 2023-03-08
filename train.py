@@ -61,7 +61,7 @@ def main():
     model.to(config.device)
     
     # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     
     # Loss function using MSE
     loss_function = nn.MSELoss()
@@ -99,14 +99,17 @@ def main():
             if batch_idx % 10 == 0:
                 epoch_loss = batch_loss.mean()
                 batch_loss_mean = np.append(batch_loss_mean, [epoch_loss])
-                print(f'Epoch: {epoch} Batch {batch_idx} \nTrain Loss: {epoch_loss:.6f}')
+                print(f'Epoch: {epoch+1}/{config.epochs_count} Batch {batch_idx} \nTrain Loss: {epoch_loss:.6f}')
         
         val_loss_mean = validation(model, val_subset_loader, loss_function)
         batch_val_loss = np.append(batch_val_loss, [val_loss_mean.item()])
         save_model(model)
-
-    pd.DataFrame({"loss": batch_loss_mean}).to_csv("loss_acc_results.csv", index=None)
-    pd.DataFrame({"val_loss": batch_val_loss}).to_csv("loss_acc_validation.csv", index=None)
+    
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+        
+    pd.DataFrame({"loss": batch_loss_mean}).to_csv("logs/loss_acc_results.csv", index=None)
+    pd.DataFrame({"val_loss": batch_val_loss}).to_csv("logs/loss_acc_validation.csv", index=None)
     print("loss_acc_results.csv saved!")
 
 

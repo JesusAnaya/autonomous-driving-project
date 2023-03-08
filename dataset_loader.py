@@ -34,11 +34,15 @@ class SullyChenDataset(Dataset):
     def __getitem__(self, idx):
         img_name = os.path.join(os.path.join(self.root_dir, "data"), self.dataframe.iloc[idx, 0])
         image = Image.open(img_name)
-        y = np.radians(self.dataframe.iloc[idx, 1]) / 2
+        width, height = image.size
+        area = (0, 90, width, height)
+        cropped_img = image.crop(area)
+
+        y = np.radians(self.dataframe.iloc[idx, 1])
         if self.transform:
-            image = self.transform(image)
+            cropped_img = self.transform(cropped_img)
                     
-        return image.float(), np.float(y)
+        return cropped_img.float(), np.float(y)
 
 
 def get_data_subsets_loaders() -> (DataLoader, DataLoader):    
