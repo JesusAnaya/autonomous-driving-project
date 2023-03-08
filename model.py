@@ -9,7 +9,7 @@ class NvidiaModel(nn.Module):
         self.scale_factor = 2
 
         # define layers using nn.Sequential
-        self.layers = nn.Sequential(
+        self.conv_layers = nn.Sequential(
             # first convolutional layer
             nn.Conv2d(3, 24, kernel_size=5, stride=2),
             nn.BatchNorm2d(24),
@@ -34,7 +34,9 @@ class NvidiaModel(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3),
             nn.BatchNorm2d(64),
             nn.ELU(),
-
+        )
+        
+        self.flat_layers = nn.Sequential(
             # flatten
             nn.Flatten(),
             nn.Dropout(p=0.5),
@@ -64,5 +66,7 @@ class NvidiaModel(nn.Module):
         )
 
     def forward(self, x):
-        x = self.layers(x)
-        return torch.flatten(x)
+        x = self.conv_layers(x)
+        x = self.flat_layers(x)
+        x = torch.flatten(x)
+        return x
