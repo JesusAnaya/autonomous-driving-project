@@ -26,6 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 dataset/
+dataset2/
 save/
 
 # PyInstaller

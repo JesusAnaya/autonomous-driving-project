@@ -21,7 +21,8 @@ def main():
     dataset_iterator = iter(dataset)
 
     model = NvidiaModel()
-    model.load_state_dict(torch.load("./save/model.pt"))
+    model.load_state_dict(torch.load("./save/model.pt", map_location=torch.device(config.device)))
+    model.to(config.device)
     model.eval()
 
     steering_wheel_1 = cv2.imread('./steering_wheel_tesla.jpg', 0)
@@ -33,6 +34,8 @@ def main():
 
     while cv2.waitKey(20) != ord('q'):
         transformed_image, image, target = next(dataset_iterator)
+        transformed_image = transformed_image.to(config.device)
+
         batch_t = torch.unsqueeze(transformed_image, 0)
 
         # Predictions
@@ -40,8 +43,8 @@ def main():
             y_predict = model(batch_t)
 
         # Converting prediction to degrees
-        pred_degrees = np.degrees(y_predict[0].item() * 2)
-        target_degrees = np.degrees(target.item() * 2)
+        pred_degrees = np.degrees(y_predict[0].item())
+        target_degrees = np.degrees(target)
 
         print(f"Predicted Steering angle: {pred_degrees}")
         print(f"Steering angle: {pred_degrees} (pred)\t {target_degrees} (actual)")

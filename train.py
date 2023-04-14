@@ -1,13 +1,19 @@
 import os
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import torch.optim.lr_scheduler as lr_scheduler
 import dataset_loader
 import numpy as np
 import pandas as pd
 from model import NvidiaModel
 from config import config
+import argparse
+
+parser = argparse.ArgumentParser(description="Compare loss values from two CSV files.")
+parser.add_argument("--dataset_type", type=str, help="Dataset type", choices=['sully', 'udacity'], default='sully')
 
 
 def save_model(model, log_dir="./save"):
@@ -52,8 +58,10 @@ def validation(model, val_subset_loader, loss_function):
 
             
 def main():
+    args = parser.parse_args()
+
     # train over the dataset about 30 times
-    train_subset_loader, val_subset_loader = dataset_loader.get_data_subsets_loaders()
+    train_subset_loader, val_subset_loader = dataset_loader.get_data_subsets_loaders(dataset_type=args.dataset_type)
     test_loader = iter(val_subset_loader)
     num_images = len(train_subset_loader.dataset) + len(val_subset_loader.dataset)
     
@@ -63,6 +71,9 @@ def main():
     # Optimizer
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     
+    # Learning rate scheduler
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=config.scheduler_step_size, gamma=config.scheduler_gamma)
+
     # Loss function using MSE
     loss_function = nn.MSELoss()
 
@@ -71,6 +82,8 @@ def main():
     batch_loss_mean = np.array([])
     batch_val_loss = np.array([])
     
+    start_time = time.time()  # record the start time
+
     for epoch in range(config.epochs_count):
         # change model in training mood
         model.train()
@@ -101,15 +114,23 @@ def main():
                 batch_loss_mean = np.append(batch_loss_mean, [epoch_loss])
                 print(f'Epoch: {epoch+1}/{config.epochs_count} Batch {batch_idx} \nTrain Loss: {epoch_loss:.6f}')
         
+        # Update learning rate
+        scheduler.step()
+
         val_loss_mean = validation(model, val_subset_loader, loss_function)
         batch_val_loss = np.append(batch_val_loss, [val_loss_mean.item()])
         save_model(model)
-    
+
+    end_time = time.time()  # record the end time
+    elapsed_time = end_time - start_time  # calculate the elapsed time
+    print(f"Training took {elapsed_time:.2f} seconds")
+
     if not os.path.exists('logs'):
         os.makedirs('logs')
         
-    pd.DataFrame({"loss": batch_loss_mean}).to_csv("logs/loss_acc_results.csv", index=None)
-    pd.DataFrame({"val_loss": batch_val_loss}).to_csv("logs/loss_acc_validation.csv", index=None)
+    pd.DataFrame({"loss": batch_loss_mean}).to_csv(f"logs/loss_acc_results_{config.dataset_type}.csv", index=None)
+    pd.DataFrame({"val_loss": batch_val_loss}).to_csv(f"logs/loss_acc_validation_{config.dataset_type}.csv", index=None)
+
     print("loss_acc_results.csv saved!")
 
 

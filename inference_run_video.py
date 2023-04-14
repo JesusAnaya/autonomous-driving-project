@@ -8,7 +8,7 @@ from config import config
 
 transform_img = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Resize(config.resize),
+    transforms.Resize(config.resize, antialias=True),
     transforms.Normalize(config.mean, config.std)
 ])
 
@@ -22,14 +22,15 @@ def angel_to_steer(degrees, cols, rows, smoothed_angle):
 def crop_down(image):
     h = image.shape[0]
     w = image.shape[1]
-    y = 150
-    x = 60
-    return image[60:int(y+h), int(x):int(x+(w-(x+90)))]
+    y = 350
+    x = 90
+    return image[190:int(y+h), int(x):int(x+(w-(x+150)))]
 
 
 def main():
     model = NvidiaModel()
-    model.load_state_dict(torch.load("./save/model.pt"))
+    model.load_state_dict(torch.load("./save/model.pt", map_location=torch.device(config.device)))
+    model.to(config.device)
     model.eval()
 
     steering_wheel_1 = cv2.imread('./steering_wheel_tesla.jpg', 0)
@@ -49,7 +50,7 @@ def main():
             break
 
         image_cropped = crop_down(image)
-        frame = transform_img(cv2.cvtColor(image_cropped, cv2.COLOR_BGR2RGB)).double()
+        frame = transform_img(cv2.cvtColor(image_cropped, cv2.COLOR_BGR2RGB)).to(config.device)
         batch_t = torch.unsqueeze(frame, 0)
 
         # Predictions
@@ -57,11 +58,11 @@ def main():
             y_predict = model(batch_t)
 
         # Converting prediction to degrees
-        pred_degrees = np.degrees(y_predict[0].item() * 2)
+        pred_degrees = np.degrees(y_predict.item())
 
         print(f"Predicted Steering angle: {pred_degrees}")
         print(f"Steering angle: {pred_degrees} (pred)")
-        cv2.imshow("frame", image_cropped)
+        cv2.imshow("frame", image)
 
         # make smooth angle transitions by turning the steering wheel based on the difference of the current angle
         # and the predicted angle

@@ -1,12 +1,9 @@
-import torch
 import torch.nn as nn
-import scipy
 
 
 class NvidiaModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.scale_factor = 2
 
         # define layers using nn.Sequential
         self.conv_layers = nn.Sequential(
@@ -68,5 +65,4 @@ class NvidiaModel(nn.Module):
     def forward(self, x):
         x = self.conv_layers(x)
         x = self.flat_layers(x)
-        x = torch.flatten(x)
-        return x
+        return x.squeeze()
