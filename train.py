@@ -14,6 +14,8 @@ import argparse
 
 parser = argparse.ArgumentParser(description="Compare loss values from two CSV files.")
 parser.add_argument("--dataset_type", type=str, help="Dataset type", choices=['sully', 'udacity'], default='sully')
+parser.add_argument("--batch_size", type=int, help="Batch size", default=50)
+parser.add_argument("--epochs_count", type=int, help="Epochs count", default=60)
 
 
 def save_model(model, log_dir="./save"):
@@ -53,7 +55,7 @@ def validation(model, val_subset_loader, loss_function):
         batch_loss = np.append(batch_loss, [loss.item()])
 
     epoch_loss = batch_loss.mean()    
-    print(f'Validation Loss: {epoch_loss:.6f}')
+    print(f'Validation Loss: {epoch_loss:.9f}')
     return epoch_loss
 
             
@@ -61,7 +63,7 @@ def main():
     args = parser.parse_args()
 
     # train over the dataset about 30 times
-    train_subset_loader, val_subset_loader = dataset_loader.get_data_subsets_loaders(dataset_type=args.dataset_type)
+    train_subset_loader, val_subset_loader = dataset_loader.get_data_subsets_loaders(dataset_type=args.dataset_type, batch_size=args.batch_size)
     test_loader = iter(val_subset_loader)
     num_images = len(train_subset_loader.dataset) + len(val_subset_loader.dataset)
     
@@ -84,7 +86,7 @@ def main():
     
     start_time = time.time()  # record the start time
 
-    for epoch in range(config.epochs_count):
+    for epoch in range(args.epochs_count):
         # change model in training mood
         model.train()
         
@@ -112,7 +114,7 @@ def main():
             if batch_idx % 10 == 0:
                 epoch_loss = batch_loss.mean()
                 batch_loss_mean = np.append(batch_loss_mean, [epoch_loss])
-                print(f'Epoch: {epoch+1}/{config.epochs_count} Batch {batch_idx} \nTrain Loss: {epoch_loss:.6f}')
+                print(f'Epoch: {epoch+1}/{args.epochs_count} Batch {batch_idx} \nTrain Loss: {epoch_loss:.9f}')
         
         # Update learning rate
         scheduler.step()

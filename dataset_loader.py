@@ -1,3 +1,4 @@
+from typing import Tuple
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms
@@ -35,7 +36,7 @@ class SullyChenDataset(Dataset):
         img_name = os.path.join(os.path.join(self.root_dir, "data"), self.dataframe.iloc[idx, 0])
         image = Image.open(img_name)
         width, height = image.size
-        area = (100, 125, width, height)
+        area = (0, 110, width, height)
         cropped_img = image.crop(area)
 
         y = np.radians(self.dataframe.iloc[idx, 1])
@@ -45,11 +46,11 @@ class SullyChenDataset(Dataset):
         return cropped_img, float(y)
     
     @staticmethod
-    def get_mean():
+    def get_mean() -> list:
         return [0.3568, 0.3770, 0.3691]
 
     @staticmethod
-    def get_std():
+    def get_std() -> list:
         return [0.2121, 0.2040, 0.1968]
 
 
@@ -83,15 +84,15 @@ class UdacityDataset(Dataset):
         return image, float(angle)
     
     @staticmethod
-    def get_mean():
+    def get_mean() -> list:
         return [0.2957, 0.3153, 0.3688]
 
     @staticmethod
-    def get_std():
+    def get_std() -> list:
         return [0.2556, 0.2609, 0.2822]
 
 
-def get_data_subsets_loaders(dataset_type='sully') -> (DataLoader, DataLoader):
+def get_data_subsets_loaders(dataset_type='sully', batch_size=config.batch_size) -> Tuple[DataLoader, DataLoader]:
     dataset_class = None
     
     if dataset_type == 'sully':
@@ -113,13 +114,13 @@ def get_data_subsets_loaders(dataset_type='sully') -> (DataLoader, DataLoader):
 
     train_subset_loader = DataLoader(
         train_set,
-        batch_size=config.batch_size,
+        batch_size=batch_size,
         shuffle=config.shuffle,
         num_workers=config.num_workers
     )
     val_subset_loader = DataLoader(
         val_set,
-        batch_size=config.batch_size,
+        batch_size=batch_size,
         shuffle=config.shuffle,
         num_workers=config.num_workers
     )

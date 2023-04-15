@@ -22,9 +22,12 @@ def angel_to_steer(degrees, cols, rows, smoothed_angle):
 def crop_down(image):
     h = image.shape[0]
     w = image.shape[1]
+    top = 170
     y = 350
-    x = 90
-    return image[190:int(y+h), int(x):int(x+(w-(x+150)))]
+    x = 50  # crop 170px from left
+    crop_width = w - x - 180  # crop 180px from right
+    crop_height = h - top  # crop 200px from top
+    return image[top:top+crop_height, x:x+crop_width]
 
 
 def main():
