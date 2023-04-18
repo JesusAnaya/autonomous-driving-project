@@ -11,7 +11,7 @@ class Config(object):
     train_split_size = 0.8
     test_split_size = 0.2
     resize = (66, 200)
-    epochs_count = 60
+    epochs_count = 10
     learning_rate = 1e-4
     weight_decay = 1e-5
     momentum = 0.9

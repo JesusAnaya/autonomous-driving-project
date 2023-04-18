@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 
 
 class NvidiaModel(nn.Module):
@@ -65,4 +66,5 @@ class NvidiaModel(nn.Module):
     def forward(self, x):
         x = self.conv_layers(x)
         x = self.flat_layers(x)
+        x = torch.clamp(x, min=-1, max=1)
         return x.squeeze()
