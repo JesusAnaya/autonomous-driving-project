@@ -26,6 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 datasets/
+captured_data_carla/
 save/
 logs/
 

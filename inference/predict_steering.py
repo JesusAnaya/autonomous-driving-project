@@ -20,7 +20,7 @@ std = [0.2121, 0.2040, 0.1968]
 def crop_down(image):
     h = image.shape[0]
     w = image.shape[1]
-    top = 280
+    top = 115
     crop_height = h - top
     return image[top:top + crop_height, :]
 
@@ -33,7 +33,7 @@ def predict_steering_angle(image):
     ])
 
     image_cropped = crop_down(image)
-    frame = transform_img(cv2.cvtColor(image_cropped, cv2.COLOR_BGR2RGB)).to(config.device)
+    frame = transform_img(image_cropped).to(config.device)
     batch_t = torch.unsqueeze(frame, 0)
 
     # Predictions
