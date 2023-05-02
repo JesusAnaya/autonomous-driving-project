@@ -5,10 +5,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_scheduler
+from torchvision.models import resnet34
+from torch.utils.tensorboard import SummaryWriter
 import dataset_loader
 import numpy as np
 import pandas as pd
-from model import NvidiaModel
+from model import NvidiaModel, NvidiaModelTransferLearning
 from config import config
 import argparse
 
@@ -61,90 +63,82 @@ def validation(model, val_subset_loader, loss_function):
             
 def main():
     args = parser.parse_args()
-
     model = NvidiaModel()
     model.to(config.device)
     
-    # Optimizer
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
-    
-    # Learning rate scheduler
     scheduler = lr_scheduler.StepLR(optimizer, step_size=config.scheduler_step_size, gamma=config.scheduler_gamma)
-
-    # Loss function using MSE
     loss_function = nn.MSELoss()
 
-    # to get batch loss
     batch_loss = np.array([])
     batch_loss_mean = np.array([])
     batch_val_loss = np.array([])
     
-    start_time = time.time()  # record the start time
+    start_time = time.time()
 
-    datasets_types = ["carla_001", "carla_002", "carla_004"]
+    datasets_types = ["sully"]
+
+    train_subset_loader, val_subset_loader = dataset_loader.get_data_subsets_loaders(
+        dataset_types=datasets_types,
+        batch_size=args.batch_size
+    )
+
+    print("Training with a train set of size: ", len(train_subset_loader.dataset))
+    print("Training with a validation set of size: ", len(val_subset_loader.dataset))
+
+    # Initialize the TensorBoard writer
+    writer = SummaryWriter(log_dir='./logs/tensorboard/')
 
     for epoch in range(args.epochs_count):
-        # reset batch index for multiple datasets
-        batch_idx = 0
-
-        # change model in training mood
         model.train()
 
-        for dataset_type in datasets_types:
-            # get datasets loaders
-            train_subset_loader, val_subset_loader = dataset_loader.get_data_subsets_loaders(
-                dataset_type=dataset_type,
-                batch_size=args.batch_size
-            )
+        for batch_idx, (data, target) in enumerate(train_subset_loader):
+            data = data.to(config.device)
+            target = target.to(config.device)
 
-            for data, target in train_subset_loader:
-                # send data to device (its is medatory if GPU has to be used)
-                data = data.to(config.device)
-                
-                # send target to device
-                target = target.to(config.device)
+            optimizer.zero_grad()
 
-                # reset parameters gradient to zero
-                optimizer.zero_grad()
-
-                # forward pass to the model
-                y_pred = model(data)
-                
-                # cross entropy loss
-                loss = loss_function(y_pred.float(), target.float())
+            y_pred = model(data)
             
-                loss.backward()
-                optimizer.step()
+            loss = loss_function(y_pred.float(), target.float())
+        
+            loss.backward()
+            optimizer.step()
 
-                batch_loss = np.append(batch_loss, [loss.item()])
+            batch_loss = np.append(batch_loss, [loss.item()])
 
-                if batch_idx % 10 == 0 and batch_idx > 0:
-                    epoch_loss = batch_loss.mean()
-                    batch_loss_mean = np.append(batch_loss_mean, [epoch_loss])
-                    print(f'Epoch: {epoch+1}/{args.epochs_count} Batch {batch_idx} \nTrain Loss: {epoch_loss:.9f}')
+            if batch_idx % 10 == 0 and batch_idx > 0:
+                epoch_loss = batch_loss.mean()
+                batch_loss_mean = np.append(batch_loss_mean, [epoch_loss])
+                print(f'Epoch: {epoch+1}/{args.epochs_count} Batch {batch_idx} \nTrain Loss: {epoch_loss:.9f}')
 
-                # increase batch index
-                batch_idx += 1
+                # Log the training loss to TensorBoard
+                writer.add_scalar('Loss/train', epoch_loss, epoch * len(train_subset_loader) + batch_idx)
 
-        # Update learning rate
+            batch_idx += 1
+
         scheduler.step()
+
+        # Log learning rate
+        #lr = optimizer.param_groups[0]['lr']
+        #writer.add_scalar('learning_rate', lr, epoch * len(train_subset_loader))
+
 
         val_loss_mean = validation(model, val_subset_loader, loss_function)
         batch_val_loss = np.append(batch_val_loss, [val_loss_mean.item()])
+        
+        # Log the validation loss to TensorBoard
+        writer.add_scalar('Loss/validation', val_loss_mean, epoch)
+
         save_model(model)
 
-    end_time = time.time()  # record the end time
-    elapsed_time = end_time - start_time  # calculate the elapsed time
+    end_time = time.time()
+    elapsed_time = end_time - start_time
     print(f"Training took {elapsed_time:.2f} seconds")
+    print("training finished")
 
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
-        
-    pd.DataFrame({"loss": batch_loss_mean}).to_csv(f"logs/loss_acc_results_{config.dataset_type}.csv", index=None)
-    pd.DataFrame({"val_loss": batch_val_loss}).to_csv(f"logs/loss_acc_validation_{config.dataset_type}.csv", index=None)
-
-    print("loss_acc_results.csv saved!")
-
+    # Close the TensorBoard writer
+    writer.close()
 
 if __name__ == '__main__':
     main()

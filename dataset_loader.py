@@ -1,14 +1,14 @@
 from typing import Tuple
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, ConcatDataset, random_split
 from torchvision import transforms
 from config import config
 import torch
 import pandas as pd
 import numpy as np
 import os
-import scipy
 import torch
+import random
 
 
 transform_img = transforms.Compose([
@@ -16,6 +16,46 @@ transform_img = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+
+def normalize_angle(angle, max_angle_degrees=180):
+    normalized_angle = angle / max_angle_degrees
+    normalized_angle = max(min(normalized_angle, 1.0), -1.0)
+    return normalized_angle
+
+
+def unwrap_angle(angle):
+    if angle > 180:
+        angle -= 360
+    elif angle < -180:
+        angle += 360
+    return angle
+
+
+def random_horizontal_flip(image, angle, p=0.5):
+    if random.random() < p:
+        image = transforms.functional.hflip(image)
+        angle = -angle
+    return image, angle
+
+
+def augment_image(image, angle, flip_p=0.5):
+    image, angle = random_horizontal_flip(image, angle, p=flip_p)
+    if random.random() < 0.5:
+        image = transforms.functional.adjust_brightness(image, random.uniform(0.8, 1.2))
+    if random.random() < 0.5:
+        image = transforms.functional.adjust_contrast(image, random.uniform(0.8, 1.2))
+    return image, angle
+
+
+class AugmentedTransform:
+    def __init__(self, transform):
+        self.transform = transform
+
+    def __call__(self, image, angle):
+        image, angle = augment_image(image, angle)
+        image = self.transform(image)
+        return image, angle
+    
 
 class SullyChenDataset(Dataset):
     def __init__(self, csv_file="data.txt", root_dir="dataset", transform=None):
@@ -36,22 +76,20 @@ class SullyChenDataset(Dataset):
         img_name = os.path.join(os.path.join(self.root_dir, "data"), self.dataframe.iloc[idx, 0])
         image = Image.open(img_name)
         width, height = image.size
-        area = (0, 110, width, height)
+        area = (0, 90, width, height)
         cropped_img = image.crop(area)
 
-        y = np.radians(self.dataframe.iloc[idx, 1])
+        y = unwrap_angle(float(self.dataframe.iloc[idx, 1]))
+        y = normalize_angle(y, 180.0)
+
         if self.transform:
-            cropped_img = self.transform(cropped_img)
+            augmented_transform = AugmentedTransform(self.transform)
+            cropped_img, y = augmented_transform(cropped_img, y)
                     
         return cropped_img, float(y)
     
-    @staticmethod
-    def get_mean() -> list:
-        return [0.3568, 0.3770, 0.3691]
-
-    @staticmethod
-    def get_std() -> list:
-        return [0.2121, 0.2040, 0.1968]
+    def set_transform(self, transform):
+        self.transform = transform
 
 
 class UdacityDataset(Dataset):
@@ -83,22 +121,12 @@ class UdacityDataset(Dataset):
 
         return image, float(angle)
     
-    @staticmethod
-    def get_mean() -> list:
-        return [0.2957, 0.3153, 0.3688]
-
-    @staticmethod
-    def get_std() -> list:
-        return [0.2556, 0.2609, 0.2822]
-
 
 class CarlaSimulatorDataset(Dataset):
-    def __init__(self, csv_file="steering_data.csv", root_dir="dataset", transform=None, mean=None, std=None):
+    def __init__(self, csv_file="steering_data.csv", root_dir="dataset", transform=None):
         self.transform = transform
         self.dataset_folder = root_dir
         self.data = pd.read_csv(os.path.join(root_dir, csv_file))
-        self.mean = [0.2957, 0.3153, 0.3688]
-        self.std = [0.2556, 0.2609, 0.2822]
 
     def __len__(self):
         return len(self.data)
@@ -110,13 +138,14 @@ class CarlaSimulatorDataset(Dataset):
         img_name = os.path.join(os.path.join(self.dataset_folder, 'images'), self.data.iloc[idx]['frame_name'])
         image = Image.open(img_name).convert('RGB')
         width, height = image.size
-        area = (0, 115, width, height)
+        area = (0, 90, width, height)
         cropped_img = image.crop(area)
 
-        angle = float(self.data.iloc[idx]['steering_angle'])
+        angle = round(float(self.data.iloc[idx]['steering_angle']), 4)
 
         if self.transform:
-            image = self.transform(cropped_img)
+            augmented_transform = AugmentedTransform(self.transform)
+            image, angle = augmented_transform(cropped_img, angle)
 
         return image, angle
     
@@ -128,46 +157,48 @@ def get_inference_dataset(dataset_type='carla_001', transform=transform_img) -> 
     if dataset_type == 'carla_001':
         return CarlaSimulatorDataset(
             transform=transform,
-            root_dir="datasets/dataset_carla_001_town04",
-            mean=[0.5886, 0.5800, 0.5878],
-            std=[0.0794, 0.0792, 0.0786]
+            root_dir="datasets/dataset_carla_001_town04"
         )
     elif dataset_type == 'carla_002':
         return CarlaSimulatorDataset(
             transform=transform,
-            root_dir="datasets/dataset_carla_002_town02_small",
-            mean=[0.6460, 0.6213, 0.6036],
-            std=[0.2173, 0.2066, 0.1929]
+            root_dir="datasets/dataset_carla_002_town02_small"
         )
     elif dataset_type == 'carla_003':
         return CarlaSimulatorDataset(
             transform=transform,
-            root_dir="datasets/dataset_carla_003_town01_small",
-            mean=[0.5124],
-            std=[0.1333]
+            root_dir="datasets/dataset_carla_003_town01_small"
         )
     elif dataset_type == 'carla_004':
         return CarlaSimulatorDataset(
             transform=transform,
-            root_dir="datasets/dataset_carla_004_town04_2",
-            mean=[0.5911, 0.5821, 0.5918],
-            std=[0.0711, 0.0720, 0.0746]
+            root_dir="datasets/dataset_carla_004_town04_2"
+        )
+    elif dataset_type == 'sully':
+        return SullyChenDataset(
+            transform=transform,
+            root_dir="datasets/sully"
         )
     else:
         raise ValueError("Invalid dataset type")
     
 
-def get_data_subsets_loaders(dataset_type='carla_001', batch_size=config.batch_size) -> Tuple[DataLoader, DataLoader]:
-    dataset = get_inference_dataset(dataset_type)
+def get_data_subsets_loaders(dataset_types=['carla_001'], batch_size=config.batch_size) -> Tuple[DataLoader, DataLoader]:
+    loades_datasets = []
 
-    transform_img = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Resize(config.resize, antialias=True),
-        transforms.Normalize(dataset.mean, dataset.std)
-    ])
-    dataset.set_transform(transform_img)
+    for dataset_type in dataset_types:
+        dataset = get_inference_dataset(dataset_type)
+        transform_img = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(config.resize, antialias=True),
+            transforms.Normalize(config.mean, config.std)
+        ])
+        dataset.set_transform(transform_img)
+        loades_datasets.append(dataset)
 
-    train_set, val_set = random_split(dataset, [config.train_split_size, config.test_split_size])
+    merged_dataset = ConcatDataset(loades_datasets)
+
+    train_set, val_set = random_split(merged_dataset, [config.train_split_size, config.test_split_size])
 
     train_subset_loader = DataLoader(
         train_set,

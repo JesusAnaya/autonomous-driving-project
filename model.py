@@ -1,5 +1,4 @@
 import torch.nn as nn
-import torch
 
 
 class NvidiaModel(nn.Module):
@@ -66,5 +65,47 @@ class NvidiaModel(nn.Module):
     def forward(self, x):
         x = self.conv_layers(x)
         x = self.flat_layers(x)
-        x = torch.clamp(x, min=-1, max=1)
+        return x.squeeze()
+
+
+class NvidiaModelTransferLearning(nn.Module):
+    def __init__(self, resnet):
+        super().__init__()
+
+        # Use the pretrained ResNet model as the convolutional layers
+        self.conv_layers = resnet
+
+        # Define the flat layers as before
+        self.flat_layers = nn.Sequential(
+            # flatten
+            nn.Flatten(),
+            nn.Dropout(p=0.5),
+
+            # first fully connected layer
+            nn.Linear(512, 1164),
+            nn.BatchNorm1d(1164),
+            nn.ELU(),
+
+            # second fully connected layer
+            nn.Linear(1164, 100),
+            nn.BatchNorm1d(100),
+            nn.ELU(),
+
+            # third fully connected layer
+            nn.Linear(100, 50),
+            nn.BatchNorm1d(50),
+            nn.ELU(),
+
+            # fourth fully connected layer
+            nn.Linear(50, 10),
+            nn.BatchNorm1d(10),
+            nn.ELU(),
+
+            # output layer
+            nn.Linear(10, 1)
+        )
+
+    def forward(self, x):
+        x = self.conv_layers(x)
+        x = self.flat_layers(x)
         return x.squeeze()
