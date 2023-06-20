@@ -1,5 +1,5 @@
 from typing import Tuple
-from PIL import Image
+from PIL import Image, ImageOps, ImageEnhance
 from torch.utils.data import Dataset, DataLoader, ConcatDataset, random_split
 from torchvision import transforms
 from config import config
@@ -83,8 +83,7 @@ class SullyChenDataset(Dataset):
         y = normalize_angle(y, 180.0)
 
         if self.transform:
-            augmented_transform = AugmentedTransform(self.transform)
-            cropped_img, y = augmented_transform(cropped_img, y)
+            cropped_img, y = self.transform(cropped_img, y)
                     
         return cropped_img, float(y)
     
@@ -121,6 +120,66 @@ class UdacityDataset(Dataset):
 
         return image, float(angle)
     
+
+class UdacitySimulator1Dataset(Dataset):
+    def __init__(self, csv_file="driving_log.csv", root_dir="datasets/udacity_sim_data_1", transform=None, augment=True):
+        self.transform = transform
+        self.dataset_folder = root_dir
+        self.data = pd.read_csv(os.path.join(root_dir, csv_file))
+        self.augment = augment
+        
+    def __len__(self):
+        return len(self.data) * 3  # Each row contains three images
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        img_idx = idx // 3  # Get the corresponding row in the CSV file
+        img_type = idx % 3  # Get the type of image (0=center, 1=left, 2=right)
+
+        if img_type == 0:
+            img_file = self.data.iloc[img_idx]['center']
+            angle = round(float(self.data.iloc[img_idx]['steering']), 4)
+        elif img_type == 1:
+            img_file = self.data.iloc[img_idx]['left']
+            angle = round(float(self.data.iloc[img_idx]['steering']) + 0.4, 4)  # Adjust steering angle
+        else:  # img_type == 2
+            img_file = self.data.iloc[img_idx]['right']
+            angle = round(float(self.data.iloc[img_idx]['steering']) - 0.4, 4)  # Adjust steering angle
+
+        img_name = os.path.join(self.dataset_folder, 'IMG', os.path.basename(img_file))
+        image = Image.open(img_name).convert('RGB')
+        width, height = image.size
+        area = (0, 60, width, height - 24)
+        cropped_img = image.crop(area)
+
+        # Augmentation
+        if self.augment:
+            # Generate a random number to select an augmentation
+            augmentation_type = random.randint(0, 2)
+
+            # Apply selected augmentation
+            if augmentation_type == 0:
+                # Horizontal flip (mirroring)
+                cropped_img = ImageOps.mirror(cropped_img)
+                angle = angle * -1.0
+            elif augmentation_type == 1:
+                # Random change in brightness between 0.5 (darker) and 1.5 (brighter)
+                brightness_factor = random.uniform(0.5, 1.5)
+                enhancer = ImageEnhance.Brightness(cropped_img)
+                cropped_img = enhancer.enhance(brightness_factor)
+            else:
+                pass  # No augmentation
+
+        if self.transform:
+            cropped_img = self.transform(cropped_img)
+
+        return cropped_img, angle
+
+    def set_transform(self, transform):
+        self.transform = transform
+
 
 class CarlaSimulatorDataset(Dataset):
     def __init__(self, csv_file="steering_data.csv", root_dir="dataset", transform=None):
@@ -179,11 +238,33 @@ def get_inference_dataset(dataset_type='carla_001', transform=transform_img) -> 
             transform=transform,
             root_dir="datasets/sully"
         )
+    elif dataset_type == 'udacity_sim_1':
+        return UdacitySimulator1Dataset(
+            transform=transform,
+            root_dir="datasets/udacity_sim_data_1"
+        )
     else:
         raise ValueError("Invalid dataset type")
     
 
-def get_data_subsets_loaders(dataset_types=['carla_001'], batch_size=config.batch_size) -> Tuple[DataLoader, DataLoader]:
+def get_data_loader(dataset_type='carla_001', batch_size=config.batch_size) -> DataLoader:
+    dataset = get_inference_dataset(dataset_type)
+    transform_img = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(config.resize, antialias=True),
+            transforms.Normalize(config.mean, config.std)
+        ])
+    dataset.set_transform(transform_img)
+    
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=config.shuffle,
+        num_workers=config.num_workers
+    )
+
+
+def get_data_subsets_loaders(dataset_types=['udacity_sim_1'], batch_size=config.batch_size) -> Tuple[DataLoader, DataLoader]:
     loades_datasets = []
 
     for dataset_type in dataset_types:

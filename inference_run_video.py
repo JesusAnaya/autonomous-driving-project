@@ -36,7 +36,7 @@ def main():
     model.to(config.device)
     model.eval()
 
-    steering_wheel_1 = cv2.imread('./steering_wheel_tesla.jpg', 0)
+    steering_wheel_1 = cv2.imread('./steering_wheel_image.jpg', 0)
     rows, cols = steering_wheel_1.shape
     smoothed_angle_1 = 1e-10
 

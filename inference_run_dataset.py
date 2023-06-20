@@ -8,6 +8,7 @@ import scipy
 from config import config
 from model import NvidiaModel
 from dataset_loader import get_inference_dataset
+from torchvision import transforms
 
 
 def angel_to_steer(degrees, cols, rows, smoothed_angle):
@@ -16,8 +17,15 @@ def angel_to_steer(degrees, cols, rows, smoothed_angle):
     return mat, smoothed_angle
 
 
+transform_img = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Resize(config.resize, antialias=True),
+    transforms.Normalize(config.mean, config.std)
+])
+
+
 def main():
-    dataset = get_inference_dataset()
+    dataset = get_inference_dataset("carla_004")
     dataset_iterator = iter(dataset)
 
     model = NvidiaModel()
@@ -25,7 +33,7 @@ def main():
     model.to(config.device)
     model.eval()
 
-    steering_wheel_1 = cv2.imread('./steering_wheel_tesla.jpg', 0)
+    steering_wheel_1 = cv2.imread('./steering_wheel_image.jpg', 0)
     steering_wheel_2 = steering_wheel_1.copy()
     rows, cols = steering_wheel_1.shape
 
@@ -33,8 +41,14 @@ def main():
     smoothed_angle_2 = 1e-10
 
     while cv2.waitKey(20) != ord('q'):
-        transformed_image, image, target = next(dataset_iterator)
-        transformed_image = transformed_image.to(config.device)
+        try:
+            image, target = next(dataset_iterator)
+        except StopIteration:
+            print("Dataset exhausted. Exiting.")
+            break
+
+        print(type(image))  # Add this line
+        transformed_image = image.to(config.device)
 
         batch_t = torch.unsqueeze(transformed_image, 0)
 
@@ -43,8 +57,8 @@ def main():
             y_predict = model(batch_t)
 
         # Converting prediction to degrees
-        pred_degrees = np.degrees(y_predict[0].item())
-        target_degrees = np.degrees(target)
+        pred_degrees = np.degrees(y_predict)
+        target_degrees = np.degrees(target.item()) # We need to get the item from the target tensor.
 
         print(f"Predicted Steering angle: {pred_degrees}")
         print(f"Steering angle: {pred_degrees} (pred)\t {target_degrees} (actual)")

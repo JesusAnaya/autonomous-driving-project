@@ -1,4 +1,13 @@
 import torch.nn as nn
+from config import config
+
+activation = {}  # initialize the activation dictionary
+
+
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+    return hook
 
 
 class NvidiaModel(nn.Module):
@@ -32,6 +41,10 @@ class NvidiaModel(nn.Module):
             nn.BatchNorm2d(64),
             nn.ELU(),
         )
+
+        if config.is_image_logging_enabled:
+            self.conv_layers[2].register_forward_hook(get_activation('first_conv_layer'))
+            self.conv_layers[5].register_forward_hook(get_activation('second_conv_layer'))
         
         self.flat_layers = nn.Sequential(
             # flatten
@@ -55,12 +68,13 @@ class NvidiaModel(nn.Module):
 
             # fourth fully connected layer
             nn.Linear(50, 10),
-            nn.BatchNorm1d(10),
-            nn.ELU(),
+            # nn.BatchNorm1d(10),
+            # nn.ELU(),
 
             # output layer
             nn.Linear(10, 1)
         )
+
 
     def forward(self, x):
         x = self.conv_layers(x)
@@ -84,22 +98,22 @@ class NvidiaModelTransferLearning(nn.Module):
             # first fully connected layer
             nn.Linear(512, 1164),
             nn.BatchNorm1d(1164),
-            nn.ELU(),
+            nn.ReLU(),
 
             # second fully connected layer
             nn.Linear(1164, 100),
             nn.BatchNorm1d(100),
-            nn.ELU(),
+            nn.ReLU(),
 
             # third fully connected layer
             nn.Linear(100, 50),
             nn.BatchNorm1d(50),
-            nn.ELU(),
+            nn.ReLU(),
 
             # fourth fully connected layer
             nn.Linear(50, 10),
             nn.BatchNorm1d(10),
-            nn.ELU(),
+            nn.ReLU(),
 
             # output layer
             nn.Linear(10, 1)
