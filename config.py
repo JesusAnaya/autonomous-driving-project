@@ -1,6 +1,5 @@
 import torch
-from dataclasses import dataclass
-import os
+from pydantic import BaseSettings
 
 
 def get_device():
@@ -12,40 +11,37 @@ def get_device():
         return "cpu"
 
 
-@dataclass
-class Config(object):
-    dataset_type = "udacity"
-    batch_size = 128
-    num_workers = 8
-    shuffle = True
-    train_split_size = 0.80
-    test_split_size = 0.20
-    resize = (66, 200)
-    epochs_count = 60
-    learning_rate = 1e-4
-    weight_decay = 1e-5
-    momentum = 0.9
-    log_interval = 10
-    save_model = True
-    root_path = "./"
-    model_path = "model.pt"
-    optimizer_path = "optimizer.pt"
-    loss_path = "loss.pt"
-    device = get_device()
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
-    epsilon = 0.001
-    early_stopping_patience = 15
-    early_stopping_min_delta = 0.005
-    
-    scheduler_milestones = [40, 60]  # Decrease the learning rate every 30 epochs
-    scheduler_step_size = 70        # Decrease the learning rate every 30 epochs
-    scheduler_gamma = 0.1     # Multiply the learning rate by 0.1 when decreasing
+class Config(BaseSettings):
+    dataset_type: str = "udacity"
+    batch_size: int = 32
+    num_workers: int = 10
+    shuffle: bool = True
+    train_split_size: float = 0.75
+    test_split_size: float = 0.25
+    resize: tuple = (66, 200)
+    epochs_count: int = 45
+    optimizer: str = "Adam"
+    learning_rate: float = 1e-3
+    weight_decay: float = 1e-3
+    momentum: float = 0.9
+    save_model: bool = True
+    root_path: str = "./"
+    model_path: str = "model.pt"
+    optimizer_path: str = "optimizer.pt"
+    loss_path: str = "loss.pt"
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    mean: list = [0.485, 0.456, 0.406]
+    std: list = [0.229, 0.224, 0.225]
+    epsilon: float = 0.001
+    early_stopping_patience: int = 8
+    early_stopping_min_delta: float = 0.001
+    scheduler_step_size: int = 70
+    scheduler_gamma: float = 0.5
+    is_saving_enabled: bool = False
+    is_loss_logging_enabled: bool = True
+    is_image_logging_enabled: bool = False
+    is_learning_rate_logging_enabled: bool = False
+    is_grad_avg_logging_enabled: bool = False
 
-    # loggers
-    is_loss_logging_enabled = True
-    is_image_logging_enabled = False
-    is_learning_rate_logging_enabled = False
-    is_grad_avg_logging_enabled = False
 
 config = Config()

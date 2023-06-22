@@ -11,10 +11,8 @@ from torchvision.utils import make_grid
 from sklearn.model_selection import KFold
 import dataset_loader as dataset_loader_module
 import numpy as np
-import pandas as pd
 from tqdm import tqdm
 import argparse
-import pandas as pd
 from model import NvidiaModel, activation
 from config import config
 from utils import EarlyStopping
@@ -22,11 +20,16 @@ from utils import EarlyStopping
 
 parser = argparse.ArgumentParser(description="Compare loss values from two CSV files.")
 parser.add_argument("--dataset_type", type=str, help="Dataset type", choices=['sully', 'udacity', 'udacity_sim_1'], default='sully')
-parser.add_argument("--batch_size", type=int, help="Batch size", default=50)
-parser.add_argument("--epochs_count", type=int, help="Epochs count", default=60)
+parser.add_argument("--batch_size", type=int, help="Batch size", default=config.batch_size)
+parser.add_argument("--epochs_count", type=int, help="Epochs count", default=config.epochs_count)
+parser.add_argument("--tensorboard_run_name", type=str, help="Tensorboard run name", default='tensorboard')
+parser.add_argument("--device", type=str, help="GPU device", default=None)
 
 
 def save_model(model, log_dir="./save"):
+    if not config.is_saving_enabled:
+        return
+    
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     checkpoint_path = os.path.join(log_dir, config.model_path)
@@ -38,7 +41,7 @@ def save_model(model, log_dir="./save"):
         model.to('cuda')
 
 
-def train(desc_message, model, train_subset_loader, loss_function, optimizer, epoch, writer):
+def train(desc_message, model, train_subset_loader, loss_function, optimizer):
     model.train()
     batch_loss = np.array([])
 
@@ -141,7 +144,7 @@ def add_images_to_tensorboard(writer, epoch, fold):
 
 def run_epoch(model, train_subset_loader, val_subset_loader, loss_function, optimizer, epoch, writer, fold, header):
     # Train the model
-    epoch_loss = train(f"{header}, Training", model, train_subset_loader, loss_function, optimizer, epoch, writer)
+    epoch_loss = train(f"{header}, Training", model, train_subset_loader, loss_function, optimizer)
 
     # Validate the model
     val_epoch_loss = validation(f"{header}, Validation", model, val_subset_loader, loss_function)
@@ -173,9 +176,14 @@ def main():
     args = parser.parse_args()
 
     start_time = time.time()
+
+    print(f"Starting Cross-Validation for: lr={config.learning_rate}, L2={config.weight_decay}, batch_size={config.batch_size}, name={args.tensorboard_run_name}")
+
+    if args.device is not None:
+        config.device = args.device
     
     # Initialize the TensorBoard writer
-    writer = SummaryWriter(log_dir='./logs/tensorboard/')
+    writer = SummaryWriter(log_dir=f'./logs/{args.tensorboard_run_name}/')
 
     dataset_type = args.dataset_type
 
@@ -192,7 +200,7 @@ def main():
 
     print("Total data size: ", len(dataset_loader.dataset))
 
-    # Split data into training and testing (70-30)
+    # Split data into training and testing
     indices = list(range(len(dataset_loader.dataset)))
     np.random.shuffle(indices)
     split = int(np.floor(config.train_split_size * len(dataset_loader.dataset)))
@@ -205,12 +213,17 @@ def main():
         print(f"\nStarting fold {fold}...\n")
 
         # Reset the model, optimizer, and scheduler at the start of each fold
-        model = NvidiaModel()        
+        model = NvidiaModel()
         model.to(config.device)
 
-        optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+        if config.optimizer == 'Adam':
+            optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+        elif config.optimizer == 'SGD':
+            optimizer = optim.SGD(model.parameters(), lr=config.learning_rate, momentum=config.momentum, weight_decay=config.weight_decay)
+        else:
+            raise ValueError(f"Invalid optimizer: {config.optimizer}")
+        
         scheduler = lr_scheduler.StepLR(optimizer, step_size=config.scheduler_step_size, gamma=config.scheduler_gamma)
-        # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=config.scheduler_milestones, gamma=config.scheduler_gamma)
 
         loss_function = nn.MSELoss()
 
@@ -222,7 +235,8 @@ def main():
         val_subset_loader = DataLoader(dataset_loader.dataset, batch_size=args.batch_size, sampler=val_sampler)
 
         # Initialize the early stopping object
-        early_stopping = EarlyStopping(patience=config.early_stopping_patience, min_delta=config.early_stopping_min_delta)
+        early_stopping_val = EarlyStopping(patience=config.early_stopping_patience, min_delta=config.early_stopping_min_delta)
+        early_stopping_train = EarlyStopping(patience=config.early_stopping_patience, min_delta=config.early_stopping_min_delta)
 
         # Lists to store the loss for each epoch in this fold
         fold_train_losses = []
@@ -253,8 +267,13 @@ def main():
             scheduler.step()
 
             # early stopping
-            early_stopping(epoch_validate_loss)
-            if early_stopping.early_stop:
+            early_stopping_train(epoch_train_loss)
+            if early_stopping_train.early_stop:
+                print(f"Early stopping triggered after {config.early_stopping_patience} epochs without improvement in training loss")
+                break
+            
+            early_stopping_val(epoch_validate_loss)
+            if early_stopping_val.early_stop:
                 print(f"Early stopping triggered after {config.early_stopping_patience} epochs without improvement in validation loss")
                 break
 

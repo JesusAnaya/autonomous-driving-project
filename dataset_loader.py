@@ -157,7 +157,7 @@ class UdacitySimulator1Dataset(Dataset):
         # Augmentation
         if self.augment:
             # Generate a random number to select an augmentation
-            augmentation_type = random.randint(0, 2)
+            augmentation_type = random.randint(0, 1)
 
             # Apply selected augmentation
             if augmentation_type == 0:
