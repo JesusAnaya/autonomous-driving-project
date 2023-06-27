@@ -177,7 +177,16 @@ def main():
 
     start_time = time.time()
 
-    print(f"Starting Cross-Validation for: lr={config.learning_rate}, L2={config.weight_decay}, batch_size={config.batch_size}, name={args.tensorboard_run_name}")
+    print(f"Starting Cross-Validation for:")
+    print(f"    Folds: {config.cross_validation_folds}")
+    print(f"    TensorBoard Run Name: {args.tensorboard_run_name}")
+    print(f"    Number of Epochs: {args.epochs_count}")
+    print(f"    Batch Size: {config.batch_size}")
+    print(f"    Learning Rate: {config.learning_rate}")
+    print(f"    Weight Decay: {config.weight_decay}")
+    print(f"    Optimizer: {config.optimizer}")
+    print(f"    Number of workers: {config.num_workers}")
+    print(f"    Scheduler: {config.scheduler_type}")
 
     if args.device is not None:
         config.device = args.device
@@ -193,46 +202,58 @@ def main():
 
     print("Loading datasets: ", dataset_type)
     
-    dataset_loader = dataset_loader_module.get_data_loader(
-        dataset_type=dataset_type,
-        batch_size=args.batch_size
-    )
+    dataset = dataset_loader_module.get_dataset(dataset_type=dataset_type)
 
-    print("Total data size: ", len(dataset_loader.dataset))
+    print("Total data size: ", len(dataset))
 
-    # Split data into training and testing
-    indices = list(range(len(dataset_loader.dataset)))
-    np.random.shuffle(indices)
-    split = int(np.floor(config.train_split_size * len(dataset_loader.dataset)))
-    train_indices, test_indices = indices[:split], indices[split:]
-    
     # Define cross-validator
-    kfold = KFold(n_splits=5, shuffle=True)
+    kfold = KFold(n_splits=config.cross_validation_folds, shuffle=True)
 
-    for fold, (train_index, val_index) in enumerate(kfold.split(train_indices), start=1):
+    for fold, (train_ids, valid_ids) in enumerate(kfold.split(dataset), start=1):
         print(f"\nStarting fold {fold}...\n")
 
         # Reset the model, optimizer, and scheduler at the start of each fold
-        model = NvidiaModel()
+        model = NvidiaModel()        
         model.to(config.device)
 
         if config.optimizer == 'Adam':
             optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
         elif config.optimizer == 'SGD':
             optimizer = optim.SGD(model.parameters(), lr=config.learning_rate, momentum=config.momentum, weight_decay=config.weight_decay)
+        elif config.optimizer == 'AdamW':
+            optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
         else:
             raise ValueError(f"Invalid optimizer: {config.optimizer}")
         
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=config.scheduler_step_size, gamma=config.scheduler_gamma)
+        if config.scheduler_type == 'step':
+            scheduler = lr_scheduler.StepLR(optimizer, step_size=config.scheduler_step_size, gamma=config.scheduler_gamma)
+        elif config.scheduler_type == 'multistep':
+            scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=config.scheduler_multistep_milestones, gamma=config.scheduler_gamma)
+        elif config.scheduler_type == 'nonscheduler':
+            scheduler = None
+        else:
+            raise ValueError(f"Invalid scheduler type: {config.scheduler_type}")
 
         loss_function = nn.MSELoss()
 
         # SubsetRandomSampler generates indices for train/validation samples
-        train_sampler = SubsetRandomSampler(train_index)
-        val_sampler = SubsetRandomSampler(val_index)
+        train_sampler = SubsetRandomSampler(train_ids)
+        val_sampler = SubsetRandomSampler(valid_ids)
 
-        train_subset_loader = DataLoader(dataset_loader.dataset, batch_size=args.batch_size, sampler=train_sampler)
-        val_subset_loader = DataLoader(dataset_loader.dataset, batch_size=args.batch_size, sampler=val_sampler)
+        # Create the data loaders
+        train_subset_loader = DataLoader(
+            dataset,
+            batch_size=args.batch_size,
+            sampler=train_sampler,
+            num_workers=config.num_workers
+        )
+
+        val_subset_loader = DataLoader(
+            dataset,
+            batch_size=args.batch_size,
+            sampler=val_sampler,
+            num_workers=config.num_workers
+        )
 
         # Initialize the early stopping object
         early_stopping_val = EarlyStopping(patience=config.early_stopping_patience, min_delta=config.early_stopping_min_delta)
@@ -264,7 +285,8 @@ def main():
             fold_validate_losses.append(epoch_validate_loss)
             
             # Update the learning rate
-            scheduler.step()
+            if scheduler is not None:
+                scheduler.step()
 
             # early stopping
             early_stopping_train(epoch_train_loss)
@@ -283,18 +305,6 @@ def main():
         # Calculate and save the average loss for this fold
         train_losses.append(sum(fold_train_losses) / len(fold_train_losses))
         validate_losses.append(sum(fold_validate_losses) / len(fold_validate_losses))
-
-    # Create DataLoader for test set
-    test_sampler = SubsetRandomSampler(test_indices)
-    test_subset_loader = DataLoader(dataset_loader.dataset, batch_size=args.batch_size, sampler=test_sampler)
-
-    # Evaluate model on test set after cross-validation
-    test_loss = validation("Testing", model, test_subset_loader, loss_function)
-
-    if config.is_loss_logging_enabled:
-        writer.add_scalar("Loss/test", test_loss)
-
-    print("Loss/test", test_loss)
 
     average_train_loss = sum(train_losses) / len(train_losses)
     average_validate_loss = sum(validate_losses) / len(validate_losses)

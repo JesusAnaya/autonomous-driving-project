@@ -247,7 +247,7 @@ def get_inference_dataset(dataset_type='carla_001', transform=transform_img) -> 
         raise ValueError("Invalid dataset type")
     
 
-def get_data_loader(dataset_type='carla_001', batch_size=config.batch_size) -> DataLoader:
+def get_dataset(dataset_type='carla_001') -> Dataset:
     dataset = get_inference_dataset(dataset_type)
     transform_img = transforms.Compose([
             transforms.ToTensor(),
@@ -256,12 +256,7 @@ def get_data_loader(dataset_type='carla_001', batch_size=config.batch_size) -> D
         ])
     dataset.set_transform(transform_img)
     
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=config.shuffle,
-        num_workers=config.num_workers
-    )
+    return dataset
 
 
 def get_data_subsets_loaders(dataset_types=['udacity_sim_1'], batch_size=config.batch_size) -> Tuple[DataLoader, DataLoader]:

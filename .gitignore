@@ -29,6 +29,7 @@ datasets/
 captured_data_carla/
 save/
 logs/
+logs_*
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
