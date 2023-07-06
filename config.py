@@ -5,7 +5,7 @@ from pydantic import BaseSettings
 
 def get_device():
     if torch.cuda.is_available():
-        return "cuda:0"
+        return "cuda"
     elif torch.backends.mps.is_available():
         return "mps"
     else:
@@ -17,8 +17,8 @@ class Config(BaseSettings):
     batch_size: int = 64
     num_workers: int = max(os.cpu_count() - 1, 1)
     shuffle: bool = True
-    train_split_size: float = 0.8
-    test_split_size: float = 0.2
+    train_split_size: float = 0.7
+    test_split_size: float = 0.3
     resize: tuple = (66, 200)
     epochs_count: int = 45
     optimizer: str = "Adam"
@@ -34,13 +34,13 @@ class Config(BaseSettings):
     mean: list = [0.485, 0.456, 0.406]
     std: list = [0.229, 0.224, 0.225]
     epsilon: float = 0.001
-    early_stopping_patience: int = 8
+    early_stopping_patience: int = 5
     early_stopping_min_delta: float = 0.001
 
     cross_validation_folds: int = 4
     
     scheduler_type: str = "multistep"
-    scheduler_multistep_milestones: list = [25, 35, 45, 50, 55]
+    scheduler_multistep_milestones: list = [8, 12, 16, 20]
     scheduler_step_size: int = 35
     scheduler_gamma: float = 0.5
     

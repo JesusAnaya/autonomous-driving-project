@@ -122,31 +122,31 @@ class UdacityDataset(Dataset):
     
 
 class UdacitySimulator1Dataset(Dataset):
-    def __init__(self, csv_file="driving_log.csv", root_dir="datasets/udacity_sim_data_1", transform=None, augment=True):
+    def __init__(self, csv_file="driving_log.csv", root_dir="datasets/udacity_sim_data_1", transform=None):
         self.transform = transform
         self.dataset_folder = root_dir
         self.data = pd.read_csv(os.path.join(root_dir, csv_file))
-        self.augment = augment
         
     def __len__(self):
-        return len(self.data) * 3  # Each row contains three images
+        return len(self.data) * 3 * 3  # Each row contains three images
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img_idx = idx // 3  # Get the corresponding row in the CSV file
-        img_type = idx % 3  # Get the type of image (0=center, 1=left, 2=right)
+        img_idx = idx // 9  # Get the corresponding row in the CSV file
+        img_type = (idx // 3) % 3  # Get the type of image (0=center, 1=left, 2=right)
+        augmentation_type = idx % 3  # Get the type of augmentation (0=none, 1=flip, 2=brightness)
 
         if img_type == 0:
             img_file = self.data.iloc[img_idx]['center']
             angle = round(float(self.data.iloc[img_idx]['steering']), 4)
         elif img_type == 1:
             img_file = self.data.iloc[img_idx]['left']
-            angle = round(float(self.data.iloc[img_idx]['steering']) + 0.4, 4)  # Adjust steering angle
+            angle = round(float(self.data.iloc[img_idx]['steering']) + 0.20, 4)  # Adjust steering angle
         else:  # img_type == 2
             img_file = self.data.iloc[img_idx]['right']
-            angle = round(float(self.data.iloc[img_idx]['steering']) - 0.4, 4)  # Adjust steering angle
+            angle = round(float(self.data.iloc[img_idx]['steering']) - 0.20, 4)  # Adjust steering angle
 
         img_name = os.path.join(self.dataset_folder, 'IMG', os.path.basename(img_file))
         image = Image.open(img_name).convert('RGB')
@@ -154,23 +154,24 @@ class UdacitySimulator1Dataset(Dataset):
         area = (0, 60, width, height - 24)
         cropped_img = image.crop(area)
 
-        # Augmentation
-        if self.augment:
-            # Generate a random number to select an augmentation
-            augmentation_type = random.randint(0, 1)
-
-            # Apply selected augmentation
-            if augmentation_type == 0:
-                # Horizontal flip (mirroring)
-                cropped_img = ImageOps.mirror(cropped_img)
-                angle = angle * -1.0
-            elif augmentation_type == 1:
-                # Random change in brightness between 0.5 (darker) and 1.5 (brighter)
-                brightness_factor = random.uniform(0.5, 1.5)
-                enhancer = ImageEnhance.Brightness(cropped_img)
-                cropped_img = enhancer.enhance(brightness_factor)
-            else:
-                pass  # No augmentation
+        # Augmentation. Apply selected augmentation
+        if augmentation_type == 1:
+            # Horizontal flip (mirroring)
+            cropped_img = ImageOps.mirror(cropped_img)
+            angle = angle * -1.0
+        elif augmentation_type == 2:
+            # Random shadow
+            img_np = np.array(cropped_img)
+            h, w = img_np.shape[0], img_np.shape[1]
+            [x1, x2] = np.random.choice(w, 2, replace=False)
+            k = h / (x2 - x1)
+            b = - k * x1
+            for i in range(h):
+                c = int((i - b) / k)
+                img_np[i, :c, :] = (img_np[i, :c, :] * .5).astype(np.int32)
+            cropped_img = Image.fromarray(img_np)
+        else:
+            pass  # No augmentation
 
         if self.transform:
             cropped_img = self.transform(cropped_img)
@@ -188,26 +189,49 @@ class CarlaSimulatorDataset(Dataset):
         self.data = pd.read_csv(os.path.join(root_dir, csv_file))
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data) * 3  # Triple the dataset size
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img_name = os.path.join(os.path.join(self.dataset_folder, 'images'), self.data.iloc[idx]['frame_name'])
+        img_idx = idx // 3  # Corrected from 9 to 3
+
+        img_name = os.path.join(os.path.join(self.dataset_folder, 'images'), self.data.iloc[img_idx]['frame_name'])
         image = Image.open(img_name).convert('RGB')
         width, height = image.size
         area = (0, 90, width, height)
         cropped_img = image.crop(area)
 
-        angle = round(float(self.data.iloc[idx]['steering_angle']), 4)
+        angle = round(float(self.data.iloc[img_idx]['steering_angle']), 4)
+
+        # Get the type of augmentation (0=none, 1=flip, 2=shadows)
+        augmentation_type = idx % 3
+
+        # Apply selected augmentation
+        if augmentation_type == 1:  # Changed from 0 to 1
+            # Horizontal flip (mirroring)
+            cropped_img = ImageOps.mirror(cropped_img)
+            angle = angle * -1.0
+        elif augmentation_type == 2:  # Changed from 1 to 2
+            # Random shadow
+            img_np = np.array(cropped_img)
+            h, w = img_np.shape[0], img_np.shape[1]
+            [x1, x2] = np.random.choice(w, 2, replace=False)
+            k = h / (x2 - x1)
+            b = - k * x1
+            for i in range(h):
+                c = int((i - b) / k)
+                img_np[i, :c, :] = (img_np[i, :c, :] * .5).astype(np.int32)
+            cropped_img = Image.fromarray(img_np)
+        else:
+            pass  # No augmentation
 
         if self.transform:
-            augmented_transform = AugmentedTransform(self.transform)
-            image, angle = augmented_transform(cropped_img, angle)
+            cropped_img = self.transform(cropped_img)
 
-        return image, angle
-    
+        return cropped_img, angle
+
     def set_transform(self, transform):
         self.transform = transform
     
@@ -243,6 +267,11 @@ def get_inference_dataset(dataset_type='carla_001', transform=transform_img) -> 
             transform=transform,
             root_dir="datasets/udacity_sim_data_1"
         )
+    elif dataset_type == 'udacity_sim_2':
+        return UdacitySimulator1Dataset(
+            transform=transform,
+            root_dir="datasets/udacity_sim_data_2"
+        )
     else:
         raise ValueError("Invalid dataset type")
     
@@ -250,9 +279,8 @@ def get_inference_dataset(dataset_type='carla_001', transform=transform_img) -> 
 def get_dataset(dataset_type='carla_001') -> Dataset:
     dataset = get_inference_dataset(dataset_type)
     transform_img = transforms.Compose([
-            transforms.ToTensor(),
             transforms.Resize(config.resize, antialias=True),
-            transforms.Normalize(config.mean, config.std)
+            transforms.ToTensor()
         ])
     dataset.set_transform(transform_img)
     
@@ -265,9 +293,8 @@ def get_data_subsets_loaders(dataset_types=['udacity_sim_1'], batch_size=config.
     for dataset_type in dataset_types:
         dataset = get_inference_dataset(dataset_type)
         transform_img = transforms.Compose([
-            transforms.ToTensor(),
             transforms.Resize(config.resize, antialias=True),
-            transforms.Normalize(config.mean, config.std)
+            transforms.ToTensor()
         ])
         dataset.set_transform(transform_img)
         loades_datasets.append(dataset)

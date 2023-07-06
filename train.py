@@ -12,7 +12,7 @@ from utils import EarlyStopping, train, validation, save_model
 
 
 parser = argparse.ArgumentParser(description="Compare loss values from two CSV files.")
-parser.add_argument("--dataset_type", type=str, help="Dataset type", choices=['sully', 'udacity', 'udacity_sim_1'], default='sully')
+parser.add_argument("--dataset_type", type=str, help="Dataset type", choices=['sully', 'udacity', 'udacity_sim_1', 'udacity_sim_2'], default='sully')
 parser.add_argument("--batch_size", type=int, help="Batch size", default=config.batch_size)
 parser.add_argument("--epochs_count", type=int, help="Epochs count", default=config.epochs_count)
 parser.add_argument("--tensorboard_run_name", type=str, help="Tensorboard run name", default='tensorboard')
@@ -39,12 +39,17 @@ def main():
     # Initialize the TensorBoard writer
     writer = SummaryWriter(log_dir=f'./logs/{args.tensorboard_run_name}/')
 
-    dataset_type = args.dataset_type
+    dataset_type = [
+        "udacity_sim_2",
+        "carla_001",
+        "carla_002",
+        "carla_003"
+    ]
 
     print("Loading datasets: ", dataset_type)
 
     train_subset_loader, val_subset_loader = dataset_loader_module.get_data_subsets_loaders(
-        [dataset_type],
+        dataset_type,
         batch_size=args.batch_size
     )
 

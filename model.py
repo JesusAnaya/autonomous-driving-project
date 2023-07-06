@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from config import config
 
@@ -10,9 +11,31 @@ def get_activation(name):
     return hook
 
 
+class NormalizeMeanStd(nn.Module):
+    def __init__(self, mean, std):
+        super().__init__()
+        self.mean = torch.Tensor(mean)
+        self.std = torch.Tensor(std)
+
+    def forward(self, x):
+        # x is a tensor [batch_size, channels, height, width]
+        # mean is a tensor [channels], std is a tensor [channels]
+        mean = self.mean.type_as(x)[None,:,None,None]
+        std = self.std.type_as(x)[None,:,None,None]
+
+        return (x - mean) / std
+
+
 class NvidiaModel(nn.Module):
     def __init__(self):
         super().__init__()
+
+        # define normalization layer
+        self.norm_layer = nn.Sequential(
+            NormalizeMeanStd(
+                mean=[0.485, 0.456, 0.406], std=[0.485, 0.456, 0.406]
+            )
+        )
 
         # define layers using nn.Sequential
         self.conv_layers = nn.Sequential(
@@ -68,15 +91,13 @@ class NvidiaModel(nn.Module):
 
             # fourth fully connected layer
             nn.Linear(50, 10),
-            # nn.BatchNorm1d(10),
-            # nn.ReLU(),
 
             # output layer
             nn.Linear(10, 1)
         )
 
-
     def forward(self, x):
+        x = self.norm_layer(x)
         x = self.conv_layers(x)
         x = self.flat_layers(x)
         return x.squeeze()
