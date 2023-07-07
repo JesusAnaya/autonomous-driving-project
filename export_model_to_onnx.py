@@ -24,7 +24,8 @@ def main():
         './save/drive_net_model.onnx',
         verbose=True,
         input_names=['input'],
-        output_names=['output']
+        output_names=['output'],
+        opset_version=11,
     )
 
     print('Model exported to "drive_net_model.onnx".')
