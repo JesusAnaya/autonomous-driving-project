@@ -30,13 +30,6 @@ class NvidiaModel(nn.Module):
     def __init__(self):
         super().__init__()
 
-        # define normalization layer
-        self.norm_layer = nn.Sequential(
-            NormalizeMeanStd(
-                mean=[0.485, 0.456, 0.406], std=[0.485, 0.456, 0.406]
-            )
-        )
-
         # define layers using nn.Sequential
         self.conv_layers = nn.Sequential(
             # first convolutional layer
@@ -97,7 +90,6 @@ class NvidiaModel(nn.Module):
         )
 
     def forward(self, x):
-        x = self.norm_layer(x)
         x = self.conv_layers(x)
         x = self.flat_layers(x)
         return x.squeeze()

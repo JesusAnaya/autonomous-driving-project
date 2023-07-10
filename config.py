@@ -11,6 +11,8 @@ def get_device():
     else:
         return "cpu"
 
+# Mean and STd for YUV space: mean = [0.4567, 0.4820, 0.5059], std = [0.2083, 0.0322, 0.0254]
+# Mean and STd for RGB space: mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225]
 
 class Config(BaseSettings):
     dataset_type: str = "udacity"
@@ -34,7 +36,7 @@ class Config(BaseSettings):
     mean: list = [0.485, 0.456, 0.406]
     std: list = [0.229, 0.224, 0.225]
     epsilon: float = 0.001
-    early_stopping_patience: int = 5
+    early_stopping_patience: int = 10
     early_stopping_min_delta: float = 0.001
 
     cross_validation_folds: int = 4

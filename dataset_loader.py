@@ -9,11 +9,11 @@ import numpy as np
 import os
 import torch
 import random
-
+import cv2
 
 transform_img = transforms.Compose([
-    transforms.Resize(config.resize, antialias=True),
     transforms.ToTensor(),
+    transforms.Resize(config.resize, antialias=True),
 ])
 
 
@@ -119,14 +119,14 @@ class UdacityDataset(Dataset):
             image = self.transform(cropped_img)
 
         return image, float(angle)
-    
+
 
 class UdacitySimulator1Dataset(Dataset):
     def __init__(self, csv_file="driving_log.csv", root_dir="datasets/udacity_sim_data_1", transform=None):
         self.transform = transform
         self.dataset_folder = root_dir
         self.data = pd.read_csv(os.path.join(root_dir, csv_file))
-        
+
     def __len__(self):
         return len(self.data) * 3 * 3  # Each row contains three images
 
@@ -149,34 +149,33 @@ class UdacitySimulator1Dataset(Dataset):
             angle = round(float(self.data.iloc[img_idx]['steering']) - 0.20, 4)  # Adjust steering angle
 
         img_name = os.path.join(self.dataset_folder, 'IMG', os.path.basename(img_file))
-        image = Image.open(img_name).convert('RGB')
-        width, height = image.size
-        area = (0, 60, width, height - 24)
-        cropped_img = image.crop(area)
+        image = cv2.imread(img_name)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        # Crop image
+        image = image[50:-24, :, :]
 
         # Augmentation. Apply selected augmentation
         if augmentation_type == 1:
             # Horizontal flip (mirroring)
-            cropped_img = ImageOps.mirror(cropped_img)
+            image = cv2.flip(image, 1)  # 1 for horizontal flipping
             angle = angle * -1.0
         elif augmentation_type == 2:
             # Random shadow
-            img_np = np.array(cropped_img)
-            h, w = img_np.shape[0], img_np.shape[1]
+            h, w = image.shape[0], image.shape[1]
             [x1, x2] = np.random.choice(w, 2, replace=False)
             k = h / (x2 - x1)
             b = - k * x1
             for i in range(h):
                 c = int((i - b) / k)
-                img_np[i, :c, :] = (img_np[i, :c, :] * .5).astype(np.int32)
-            cropped_img = Image.fromarray(img_np)
+                image[i, :c, :] = (image[i, :c, :] * .5).astype(np.int32)
         else:
             pass  # No augmentation
 
         if self.transform:
-            cropped_img = self.transform(cropped_img)
+            image = self.transform(image)
 
-        return cropped_img, angle
+        return image, angle
 
     def set_transform(self, transform):
         self.transform = transform
@@ -198,10 +197,11 @@ class CarlaSimulatorDataset(Dataset):
         img_idx = idx // 3  # Corrected from 9 to 3
 
         img_name = os.path.join(os.path.join(self.dataset_folder, 'images'), self.data.iloc[img_idx]['frame_name'])
-        image = Image.open(img_name).convert('RGB')
-        width, height = image.size
-        area = (0, 90, width, height)
-        cropped_img = image.crop(area)
+        image = cv2.imread(img_name)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        # Crop image
+        image = image[40:, :, :]
 
         angle = round(float(self.data.iloc[img_idx]['steering_angle']), 4)
 
@@ -211,30 +211,28 @@ class CarlaSimulatorDataset(Dataset):
         # Apply selected augmentation
         if augmentation_type == 1:  # Changed from 0 to 1
             # Horizontal flip (mirroring)
-            cropped_img = ImageOps.mirror(cropped_img)
+            image = cv2.flip(image, 1)  # 1 for horizontal flipping
             angle = angle * -1.0
         elif augmentation_type == 2:  # Changed from 1 to 2
             # Random shadow
-            img_np = np.array(cropped_img)
-            h, w = img_np.shape[0], img_np.shape[1]
+            h, w = image.shape[0], image.shape[1]
             [x1, x2] = np.random.choice(w, 2, replace=False)
             k = h / (x2 - x1)
             b = - k * x1
             for i in range(h):
                 c = int((i - b) / k)
-                img_np[i, :c, :] = (img_np[i, :c, :] * .5).astype(np.int32)
-            cropped_img = Image.fromarray(img_np)
+                image[i, :c, :] = (image[i, :c, :] * .5).astype(np.int32)
         else:
             pass  # No augmentation
 
         if self.transform:
-            cropped_img = self.transform(cropped_img)
+            image = self.transform(image)
 
-        return cropped_img, angle
+        return image, angle
 
     def set_transform(self, transform):
         self.transform = transform
-    
+
 
 def get_inference_dataset(dataset_type='carla_001', transform=transform_img) -> DataLoader:
     if dataset_type == 'carla_001':
@@ -279,9 +277,10 @@ def get_inference_dataset(dataset_type='carla_001', transform=transform_img) -> 
 def get_dataset(dataset_type='carla_001') -> Dataset:
     dataset = get_inference_dataset(dataset_type)
     transform_img = transforms.Compose([
-            transforms.Resize(config.resize, antialias=True),
-            transforms.ToTensor()
-        ])
+        transforms.ToTensor(),
+        transforms.Resize(config.resize, antialias=True),
+        transforms.Normalize(mean=config.mean, std=config.std),
+    ])
     dataset.set_transform(transform_img)
     
     return dataset
@@ -293,8 +292,9 @@ def get_data_subsets_loaders(dataset_types=['udacity_sim_1'], batch_size=config.
     for dataset_type in dataset_types:
         dataset = get_inference_dataset(dataset_type)
         transform_img = transforms.Compose([
+            transforms.ToTensor(),
             transforms.Resize(config.resize, antialias=True),
-            transforms.ToTensor()
+            transforms.Normalize(mean=config.mean, std=config.std),
         ])
         dataset.set_transform(transform_img)
         loades_datasets.append(dataset)
