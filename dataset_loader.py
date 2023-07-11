@@ -47,6 +47,14 @@ def augment_image(image, angle, flip_p=0.5):
     return image, angle
 
 
+def add_random_brightness(image):
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+    random_bright = 0.25 + np.random.uniform()
+    image[:, :, 2] = image[:, :, 2] * random_bright
+    image = cv2.cvtColor(image, cv2.COLOR_HSV2RGB)
+    return image
+
+
 class AugmentedTransform:
     def __init__(self, transform):
         self.transform = transform
@@ -153,7 +161,7 @@ class UdacitySimulator1Dataset(Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         # Crop image
-        image = image[50:-24, :, :]
+        image = image[60:-24, :, :]
 
         # Augmentation. Apply selected augmentation
         if augmentation_type == 1:
@@ -161,16 +169,13 @@ class UdacitySimulator1Dataset(Dataset):
             image = cv2.flip(image, 1)  # 1 for horizontal flipping
             angle = angle * -1.0
         elif augmentation_type == 2:
-            # Random shadow
-            h, w = image.shape[0], image.shape[1]
-            [x1, x2] = np.random.choice(w, 2, replace=False)
-            k = h / (x2 - x1)
-            b = - k * x1
-            for i in range(h):
-                c = int((i - b) / k)
-                image[i, :c, :] = (image[i, :c, :] * .5).astype(np.int32)
+            # Random brightness
+            image = add_random_brightness(image)
         else:
             pass  # No augmentation
+
+        # resize image to 200x66
+        image = cv2.resize(image, (200, 66), interpolation=cv2.INTER_AREA)
 
         if self.transform:
             image = self.transform(image)
@@ -201,7 +206,7 @@ class CarlaSimulatorDataset(Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         # Crop image
-        image = image[40:, :, :]
+        image = image[50:, :, :]
 
         angle = round(float(self.data.iloc[img_idx]['steering_angle']), 4)
 
@@ -214,16 +219,13 @@ class CarlaSimulatorDataset(Dataset):
             image = cv2.flip(image, 1)  # 1 for horizontal flipping
             angle = angle * -1.0
         elif augmentation_type == 2:  # Changed from 1 to 2
-            # Random shadow
-            h, w = image.shape[0], image.shape[1]
-            [x1, x2] = np.random.choice(w, 2, replace=False)
-            k = h / (x2 - x1)
-            b = - k * x1
-            for i in range(h):
-                c = int((i - b) / k)
-                image[i, :c, :] = (image[i, :c, :] * .5).astype(np.int32)
+            # Random brightness
+            image = add_random_brightness(image)
         else:
             pass  # No augmentation
+
+        # resize image to 200x66
+        image = cv2.resize(image, (200, 66), interpolation=cv2.INTER_AREA)
 
         if self.transform:
             image = self.transform(image)
@@ -278,8 +280,7 @@ def get_dataset(dataset_type='carla_001') -> Dataset:
     dataset = get_inference_dataset(dataset_type)
     transform_img = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Resize(config.resize, antialias=True),
-        transforms.Normalize(mean=config.mean, std=config.std),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
     ])
     dataset.set_transform(transform_img)
     
@@ -293,8 +294,7 @@ def get_data_subsets_loaders(dataset_types=['udacity_sim_1'], batch_size=config.
         dataset = get_inference_dataset(dataset_type)
         transform_img = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize(config.resize, antialias=True),
-            transforms.Normalize(mean=config.mean, std=config.std),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ])
         dataset.set_transform(transform_img)
         loades_datasets.append(dataset)
