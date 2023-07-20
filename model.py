@@ -11,19 +11,12 @@ def get_activation(name):
     return hook
 
 
-class NormalizeMeanStd(nn.Module):
-    def __init__(self, mean, std):
-        super().__init__()
-        self.mean = torch.Tensor(mean)
-        self.std = torch.Tensor(std)
-
+# Normalize the image from int8 (0, 255) to float32 (-1.0, 1.0)
+# This operation is included in the model instead of the data loader
+# for taking advantage of the GPU
+class Normalize(nn.Module):
     def forward(self, x):
-        # x is a tensor [batch_size, channels, height, width]
-        # mean is a tensor [channels], std is a tensor [channels]
-        mean = self.mean.type_as(x)[None,:,None,None]
-        std = self.std.type_as(x)[None,:,None,None]
-
-        return (x - mean) / std
+        return x / 127.5 - 1.0
 
 
 class NvidiaModel(nn.Module):

@@ -53,9 +53,9 @@ def train(desc_message, model, train_subset_loader, loss_function, optimizer):
         optimizer.zero_grad()
 
         y_pred = model(data)
-        
+
         loss = loss_function(y_pred.float(), target.float())
-    
+
         loss.backward()
         optimizer.step()
 
@@ -194,15 +194,19 @@ def main():
     # Initialize the TensorBoard writer
     writer = SummaryWriter(log_dir=f'./logs/{args.tensorboard_run_name}/')
 
-    dataset_type = args.dataset_type
-
     # Lists to store the average loss for each fold
     train_losses = []
     validate_losses = []
 
-    print("Loading datasets: ", dataset_type)
-    
-    dataset = dataset_loader_module.get_dataset(dataset_type=dataset_type)
+    print("Loading datasets concatenated...")
+
+    dataset_types = [
+        "udacity_sim_2",
+        "carla_001",
+        "carla_002",
+        "carla_003"
+    ]
+    dataset = dataset_loader_module.get_datasets(dataset_types=dataset_types)
 
     print("Total data size: ", len(dataset))
 
@@ -213,7 +217,7 @@ def main():
         print(f"\nStarting fold {fold}...\n")
 
         # Reset the model, optimizer, and scheduler at the start of each fold
-        model = NvidiaModel()        
+        model = NvidiaModel()
         model.to(config.device)
 
         if config.optimizer == 'Adam':

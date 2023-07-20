@@ -41,7 +41,7 @@ def main():
 
     dataset_type = [
         "udacity_sim_2",
-        "carla_001",
+        #"carla_001",
         "carla_002",
         "carla_003"
     ]
